@@ -11,7 +11,7 @@ import org.springframework.data.redis.connection.RedisConnectionFactory;
 
 @Slf4j
 @Configuration
-//@Profile("dev")              // ⭐ dev 프로필에서만 활성
+@Profile("dev")              // ⭐ dev 프로필에서만 활성
 @RequiredArgsConstructor
 public class DevRedisCleaner {
 
