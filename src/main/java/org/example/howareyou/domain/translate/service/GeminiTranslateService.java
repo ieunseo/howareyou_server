@@ -47,7 +47,8 @@ public class GeminiTranslateService {
         String target = requestDto.getTarget();
 
         // 엔드포인트 결정 (flash 모델은 generateContent, 아니면 generateText)
-        String action = model.toLowerCase().contains("flash") ? ":generateContent" : ":generateText";
+//        String action = model.toLowerCase().contains("flash") ? ":generateContent" : ":generateText";
+        String action = ":generateContent";
         String endpoint = String.format("%s/models/%s%s", baseUrl, model, action);
         String url = UriComponentsBuilder.fromHttpUrl(endpoint).toUriString();
 

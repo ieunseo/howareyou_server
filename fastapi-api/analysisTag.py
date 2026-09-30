@@ -19,22 +19,35 @@ import os
 from pymongo import MongoClient
 
 # ===== MongoDB 연결 =====
-MONGO_URI = os.getenv(
-    "MONGO_URI",
-    "mongodb+srv://howruname:howrupass@howru.ywfyiyp.mongodb.net/?retryWrites=true&w=majority&appName=howru"
-)
-MONGO_DB  = os.getenv("MONGO_DB", "howrudb")
+# MONGO_URI = os.getenv(
+#     "MONGO_URI",
+#     "mongodb+srv://les67030500_db_user:updvuRAltHnB2o7t@cluster0.49hfynz.mongodb.net/?appName=Cluster0"
+# )
+# MONGO_DB  = os.getenv("MONGO_DB", "howrudb")
+#
+# client = MongoClient(
+#     MONGO_URI,
+#     socketTimeoutMS=20000,
+#     connectTimeoutMS=20000,
+#     serverSelectionTimeoutMS=20000,
+#     tls=True,              # SRV는 기본 TLS지만 명시해도 무방
+#     retryWrites=True
+# )
+# db = client[MONGO_DB]
+# ===== MongoDB 연결 =====
+MONGO_URI = os.environ["MONGO_URI"]
+MONGO_DB = os.environ["MONGO_DB"]
 
 client = MongoClient(
     MONGO_URI,
     socketTimeoutMS=20000,
     connectTimeoutMS=20000,
     serverSelectionTimeoutMS=20000,
-    tls=True,              # SRV는 기본 TLS지만 명시해도 무방
-    retryWrites=True
+    tls=True,
+    retryWrites=True,
 )
-db = client[MONGO_DB]
 
+db = client[MONGO_DB]
 
 # 컬렉션 이름 (필요시 변경)
 VOCAB_COLL = "chatroom_vocabulary"   # 예: { memberId: 123, words: ["pizza", "travel", ...] }
