@@ -165,21 +165,20 @@ public class ChatRoomService {
    */
   @Transactional
   public ChatRoomResponse getChatRoom(String uuid, Long myId) {
+    //채팅방 uuid
     ChatRoom chatRoom = chatRoomRepository.findByUuid(uuid)
         .orElseThrow(() -> new CustomException(ErrorCode.CHAT_ROOM_NOT_FOUND));
 
-    if (chatRoom.hasParticipant(myId)) {
-      throw new CustomException(ErrorCode.FORBIDDEN_CHAT_ROOM_ACCESS);
-    }
-
+    // 그 방에서 나의 참여 정보
     ChatRoomMember memberEntry = chatRoomMemberRepository
         .findByChatRoomAndMemberId(chatRoom, myId)
         .orElseThrow(() -> new CustomException(ErrorCode.FORBIDDEN_CHAT_ROOM_ACCESS));
 
+    // join 이 아니면에러
     if (memberEntry.getStatus() != ChatRoomMemberStatus.JOINED) {
       throw new CustomException(ErrorCode.FORBIDDEN_CHAT_ROOM_ACCESS);
     }
-
+// 나를 제외한 다른 참여자를 꺼냄.
     Member opponent = chatRoom.getOtherParticipant(myId);
 
     return new ChatRoomResponse(

@@ -43,6 +43,7 @@ public enum ErrorCode {
     AUTH_SOCIAL_ACCOUNT_NOT_FOUND(HttpStatus.NOT_FOUND,  "A005", "연결된 소셜 계정을 찾을 수 없습니다."),
     DUPLICATE_EMAIL            (HttpStatus.CONFLICT,    "A006", "이미 가입된 이메일입니다."),
     AUTH_REFRESH_TOKEN_NOT_FOUND(HttpStatus.UNAUTHORIZED, "A007", "리프레시 토큰이 존재하지 않습니다."),
+    AUTH_LOGIN_REQUIRED(HttpStatus.UNAUTHORIZED,"A008","로그인이 필요합니다"),
 
     /* ───────────[멤버]─────────── */
     MEMBER_NOT_FOUND       (HttpStatus.NOT_FOUND,   "M001", "해당 사용자를 찾을 수 없습니다."),
@@ -59,7 +60,7 @@ public enum ErrorCode {
 
     /* ───────────[chat room]─────────── */
     CHAT_ROOM_NOT_FOUND (HttpStatus.NOT_FOUND, "CR001", "채팅방을 찾을 수 없습니다."),
-    FORBIDDEN_CHAT_ROOM_ACCESS (HttpStatus.UNAUTHORIZED, "CR002", "채팅방 접근 권한이 없습니다."),
+    FORBIDDEN_CHAT_ROOM_ACCESS (HttpStatus.FORBIDDEN, "CR002", "채팅방 접근 권한이 없습니다."),
     INVALID_CHAT_ROOM_UUID (HttpStatus.NOT_FOUND, "CR003", "기존 채팅방의 UUID가 유효하지 않습니다."),
     INVALID_CHAT_ROOM_STATE (HttpStatus.NOT_FOUND, "CR004", "채팅방의 상태가 올바르지 않습니다."),
 

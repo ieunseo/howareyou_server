@@ -18,7 +18,7 @@ public interface ChatMessageDocumentRepository extends MongoRepository<ChatMessa
           Pageable pageable
   );
 
-  List<ChatMessageDocument> findByChatRoomUuidAndSenderNameNotAndChatMessageStatus(
+  List<ChatMessageDocument> findByChatRoomUuidAndSenderIdNotAndChatMessageStatus(
           String chatRoomUuid,
           String senderId,
           ChatMessageStatus status

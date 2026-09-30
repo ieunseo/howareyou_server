@@ -40,5 +40,10 @@ public interface ChatRoomMemberRepository extends JpaRepository<ChatRoomMember, 
 """)
   Optional<ChatRoom> findByUuidWithMembers(@Param("uuid") String uuid);
 
-
+  //chatroom 에 존재하는사람인지 확인
+  boolean existsByChatRoom_UuidAndMember_IdAndStatus(
+          String roomUuid,
+          Long memberId,
+          ChatRoomMemberStatus status
+  );
 }
