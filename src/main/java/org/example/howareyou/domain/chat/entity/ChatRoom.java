@@ -35,6 +35,8 @@ public class ChatRoom extends BaseTime {
   @OneToMany(mappedBy = "chatRoom", cascade = CascadeType.ALL, orphanRemoval = true)
   private List<ChatRoomMember> members = new ArrayList<>();
 
+  private String title;
+
   @PrePersist
   public void generateUuid() {
     if (this.uuid == null) {
