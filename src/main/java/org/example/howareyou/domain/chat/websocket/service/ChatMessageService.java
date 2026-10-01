@@ -10,7 +10,9 @@ import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.example.howareyou.domain.chat.entity.ChatRoom;
+import org.example.howareyou.domain.chat.entity.ChatRoomMemberStatus;
 import org.example.howareyou.domain.chat.kafka.dto.ChatMessageCreatedEvent;
+import org.example.howareyou.domain.chat.repository.ChatRoomMemberRepository;
 import org.example.howareyou.domain.chat.repository.ChatRoomRepository;
 import org.example.howareyou.domain.chat.websocket.dto.ChatMessageDocumentResponse;
 import org.example.howareyou.domain.chat.websocket.dto.ChatMessageResponse;
@@ -40,6 +42,7 @@ public class ChatMessageService {
   private final MemberRepository memberRepository;
   private final KafkaTemplate<String, Object> kafkaTemplate;
   private final ObjectMapper objectMapper;
+  private final ChatRoomMemberRepository chatRoomMemberRepository;
 
   /**
    * 채팅 메시지를 Redis 캐시에 저장하고, MongoDB에 영구 저장하는 메서드. - 채팅방 및 상대방 정보 확인 - Redis: 최근 메시지 추가, 안읽은 메시지 수
@@ -98,8 +101,10 @@ public class ChatMessageService {
   /**
    * Redis에서 최근 메시지 30개 조회
    */
-  public List<ChatMessageDocumentResponse> getRecentMessagesWithFallback(String chatRoomId, int maxCount) {
+  public List<ChatMessageDocumentResponse> getRecentMessagesWithFallback(String chatRoomId, int maxCount,Long memberId) {
 
+    // 0. 이 방 참여자인지 확인
+    requireJoinedMember(chatRoomId,memberId);
     // 1. Redis에서 메시지 조회
     List<Object> rawMessages = chatRedisService.getRecentMessages(chatRoomId, maxCount);
     List<ChatMessageDocument> redisMessages = rawMessages.stream()
@@ -152,6 +157,8 @@ public class ChatMessageService {
    * - MongoDB 메시지 상태를 읽음(READ)으로 변경
    */
   public void markMessagesAsRead(String chatRoomId, String userId) {
+    // 0. 이 방 참여자인지 확인
+    requireJoinedMember(chatRoomId,Long.parseLong(userId));
 
     // 1. Redis에서 안 읽은 메시지 수 초기화
     chatRedisService.resetUnread(chatRoomId, userId);
@@ -168,7 +175,9 @@ public class ChatMessageService {
   /**
    * 이전 메시지 페이징
   */
-  public List<ChatMessageDocumentResponse> getPreviousMessages(String chatRoomId, Instant before, int size) {
+  public List<ChatMessageDocumentResponse> getPreviousMessages(String chatRoomId, Instant before, int size, Long memberId) {
+    //이 방의 참여자인지
+    requireJoinedMember(chatRoomId,memberId);
     PageRequest pageable = PageRequest.of(0, size, Sort.by(Sort.Direction.DESC, "messageTime"));
 
     List<ChatMessageDocument> mongoMessages =
@@ -182,5 +191,12 @@ public class ChatMessageService {
     return mongoMessages.stream()
         .map(ChatMessageDocumentResponse::from)
         .toList();
+  }
+
+  // 이 방의 JOINED 참여자가 아니면 403
+  private void requireJoinedMember(String roomUuid, Long memberId){
+    if(!chatRoomMemberRepository.existsByChatRoom_UuidAndMember_IdAndStatus(roomUuid,memberId, ChatRoomMemberStatus.JOINED)){
+      throw new CustomException(ErrorCode.FORBIDDEN_CHAT_ROOM_ACCESS);
+    }
   }
 }

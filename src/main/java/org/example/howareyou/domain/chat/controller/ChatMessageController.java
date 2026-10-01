@@ -44,9 +44,11 @@ public class ChatMessageController {
   @GetMapping("/{chatRoomId}/recent")
   public List<ChatMessageDocumentResponse> getRecentMessages(
       @PathVariable String chatRoomId,
-      @RequestParam(defaultValue = "30") int count
+      @RequestParam(defaultValue = "30") int count,
+      @AuthenticationPrincipal CustomMemberDetails memberDetails
   ) {
-    return chatMessageService.getRecentMessagesWithFallback(chatRoomId, count);
+    Long memberId = memberDetails.getId();
+    return chatMessageService.getRecentMessagesWithFallback(chatRoomId, count,memberId);
   }
 
   @Operation(
@@ -63,9 +65,11 @@ public class ChatMessageController {
   public List<ChatMessageDocumentResponse> getPreviousMessages(
       @PathVariable String chatRoomId,
       @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant before,
-      @RequestParam(defaultValue = "30") int size
+      @RequestParam(defaultValue = "30") int size,
+      @AuthenticationPrincipal CustomMemberDetails memberDetails
   ) {
-    return chatMessageService.getPreviousMessages(chatRoomId, before, size);
+    Long memberId = memberDetails.getId();
+    return chatMessageService.getPreviousMessages(chatRoomId, before, size,memberId);
   }
 
   @Operation(
