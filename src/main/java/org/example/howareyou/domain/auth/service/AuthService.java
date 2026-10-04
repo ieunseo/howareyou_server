@@ -123,7 +123,8 @@ public class AuthService {
         
         // 3. 만료된 Access Token에서 Auth ID 추출 및 검증
         try {
-            Long tokenAuthId = jwtTokenProvider.getAuthIdFromAccessToken(expiredAccessToken);
+            // 만료된 토큰이어도 서명이 맞으면 Auth ID를 꺼냄 (기존 메서드는 만료 시 예외라 갱신이 항상 실패했음)
+            Long tokenAuthId = jwtTokenProvider.getAuthIdFromExpiredAccessToken(expiredAccessToken);
             if (!tokenAuthId.equals(auth.getId())) {
                 log.warn("Access token auth ID mismatch. Token: {}, DB: {}", 
                         tokenAuthId, auth.getId());

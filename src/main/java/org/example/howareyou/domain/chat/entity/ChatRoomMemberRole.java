@@ -4,5 +4,5 @@ package org.example.howareyou.domain.chat.entity;
  * */
 public enum ChatRoomMemberRole {
     OWNER, //방장
-    MEMBER
+    MEMBER //일반 참여자
 }

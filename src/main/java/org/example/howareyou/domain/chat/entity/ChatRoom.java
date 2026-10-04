@@ -68,4 +68,16 @@ public class ChatRoom extends BaseTime {
     members.add(member);
     member.setChatRoom(this);
   }
+
+  // 그룹방 여부 (type이 비어 있는 옛 데이터는 1:1로 취급)
+  public boolean isGroup() {
+    return type == ChatRoomType.GROUP;
+  }
+
+  // 현재 참여 중(JOINED)인 사람 수
+  public long countJoinedMembers() {
+    return members.stream()
+        .filter(m -> m.getStatus() == ChatRoomMemberStatus.JOINED)
+        .count();
+  }
 }
