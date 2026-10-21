@@ -47,7 +47,8 @@ public class QuizGeneratorServiceImpl implements QuizGeneratorService {
 
     /* ====================== 공개 API ====================== */
 
-    /** 전체 랜덤 퀴즈 (레벨 필터 가능), 최소 5문항 ~ 최대 30문항 */
+    /**
+     * 전체 랜덤 퀴즈 (레벨 필터 가능), 최소 5문항 ~ 최대 30문항 */
     @Override
     public ClientStartResponse startRandomQuiz(String membername, QuizLevel quizLevel) {
         Long memberId = memberService.getIdByMembername(membername);
