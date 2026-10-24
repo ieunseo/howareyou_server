@@ -87,8 +87,9 @@ public class ChatController {
         throw new CustomException(ErrorCode.FORBIDDEN_CHAT_ROOM_ACCESS, "Sender mismatch");
       }
     } else {
-      log.warn("⚠️ 인증된 사용자 정보가 없음 - 임시로 테스트 ID 사용");
-      req.setSenderId(1L); // 임시 테스트용 ID
+//      log.warn("⚠️ 인증된 사용자 정보가 없음 - 임시로 테스트 ID 사용");
+//      req.setSenderId(1L); // 임시 테스트용 ID
+      throw new CustomException(ErrorCode.AUTH_LOGIN_REQUIRED,"로그인되지않은사용자");
     }
 
     try {
@@ -139,8 +140,9 @@ public class ChatController {
       userId = memberDetails.getId().toString();
       log.info("👤 인증된 사용자: ID={}, membername={}", memberDetails.getId(), memberDetails.getMembername());
     } else {
-      log.warn("⚠️ 인증된 사용자 정보가 없음 - 임시로 테스트 ID 사용");
-      userId = "5"; // 임시 테스트용 ID
+//      log.warn("⚠️ 인증된 사용자 정보가 없음 - 임시로 테스트 ID 사용");
+//      userId = "5"; // 임시 테스트용 ID
+      throw new CustomException(ErrorCode.AUTH_LOGIN_REQUIRED,"인증되지 않은 사용자 입장");
     }
     
     String chatRoomId = dto.getChatRoomId();

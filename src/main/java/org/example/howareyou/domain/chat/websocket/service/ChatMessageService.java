@@ -3,6 +3,7 @@ package org.example.howareyou.domain.chat.websocket.service;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Instant;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -10,7 +11,10 @@ import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.example.howareyou.domain.chat.entity.ChatRoom;
+import org.example.howareyou.domain.chat.entity.ChatRoomMember;
+import org.example.howareyou.domain.chat.entity.ChatRoomMemberStatus;
 import org.example.howareyou.domain.chat.kafka.dto.ChatMessageCreatedEvent;
+import org.example.howareyou.domain.chat.repository.ChatRoomMemberRepository;
 import org.example.howareyou.domain.chat.repository.ChatRoomRepository;
 import org.example.howareyou.domain.chat.websocket.dto.ChatMessageDocumentResponse;
 import org.example.howareyou.domain.chat.websocket.dto.ChatMessageResponse;
@@ -40,6 +44,7 @@ public class ChatMessageService {
   private final MemberRepository memberRepository;
   private final KafkaTemplate<String, Object> kafkaTemplate;
   private final ObjectMapper objectMapper;
+  private final ChatRoomMemberRepository chatRoomMemberRepository;
 
   /**
    * 채팅 메시지를 Redis 캐시에 저장하고, MongoDB에 영구 저장하는 메서드. - 채팅방 및 상대방 정보 확인 - Redis: 최근 메시지 추가, 안읽은 메시지 수
@@ -61,34 +66,42 @@ public class ChatMessageService {
     Member sender = memberRepository.findById(senderId)
         .orElseThrow(() -> new CustomException(ErrorCode.MEMBER_NOT_FOUND));
 
-    // DB: 수신자 조회
-    Member receiver = chatRoomRepository.findReceiverByRoomUuidAndSenderId(chatRoomUuid, senderId);
+    // 보낸 사람이 이 방의 JOINED 참여자인지 확인 (초대만 받았거나 나간 사람은 전송 불가)
+    requireJoinedMember(chatRoomUuid, senderId);
 
-    // 임시 메시지 ID 생성 (UUID)
-    String tempMessageId = UUID.randomUUID().toString();
+    // 1:1 방만 수신자 1명을 ACK에 채워 줌 (기존 클라이언트 호환). 그룹방은 수신자가 여러 명이라 null
+    Member receiver = chatRoom.isGroup()
+        ? null
+        : chatRoomRepository.findReceiverByRoomUuidAndSenderId(chatRoomUuid, senderId);
+
+    // 메시지 ID·시각을 여기서 확정 → Consumer가 같은 값으로 Mongo에 저장
+    String messageId = UUID.randomUUID().toString();
+    Instant messageTime = Instant.now();
 
     // Kafka 이벤트 발행 (Mongo 저장은 Consumer에서)
-    ChatMessageCreatedEvent event = new ChatMessageCreatedEvent(
-        chatRoom.getId(),
-        chatRoomUuid,
-        senderId,
-        receiver.getId(),
-        tempMessageId,
-        request.getContent()
-    );
+    ChatMessageCreatedEvent event = ChatMessageCreatedEvent.builder()
+        .roomId(chatRoom.getId())
+        .roomUuid(chatRoomUuid)
+        .senderId(senderId)
+        .senderName(sender.getMembername())
+        .messageId(messageId)
+        .content(request.getContent())
+        .messageTime(messageTime)
+        .build();
 
-    kafkaTemplate.send("chat.message.created", tempMessageId, objectMapper.writeValueAsString(event));
+    // Kafka 키 = 방 UUID → 같은 방 메시지는 같은 파티션으로 가서 순서가 보장됨
+    kafkaTemplate.send("chat.message.created", chatRoomUuid, objectMapper.writeValueAsString(event));
 
     // ACK 응답
     return new ChatMessageResponse(
-        tempMessageId,
+        messageId,
         chatRoomUuid,
         String.valueOf(senderId),
         sender.getMembername(),
-        String.valueOf(receiver.getId()),
-        receiver.getMembername(),
+        receiver != null ? String.valueOf(receiver.getId()) : null,
+        receiver != null ? receiver.getMembername() : null,
         request.getContent(),
-        Instant.now(),
+        messageTime,
         ChatMessageStatus.UNREAD
     );
   }
@@ -98,13 +111,16 @@ public class ChatMessageService {
   /**
    * Redis에서 최근 메시지 30개 조회
    */
-  public List<ChatMessageDocumentResponse> getRecentMessagesWithFallback(String chatRoomId, int maxCount) {
+  public List<ChatMessageDocumentResponse> getRecentMessagesWithFallback(String chatRoomId, int maxCount,Long memberId) {
 
+    // 0. 이 방 참여자인지 확인 + 그룹방이면 참여 시각 이후 메시지만 보이게
+    Instant visibleFrom = getVisibleFrom(chatRoomId, memberId);
     // 1. Redis에서 메시지 조회
     List<Object> rawMessages = chatRedisService.getRecentMessages(chatRoomId, maxCount);
     List<ChatMessageDocument> redisMessages = rawMessages.stream()
         .filter(ChatMessageDocument.class::isInstance)
         .map(o -> (ChatMessageDocument) o)
+        .filter(d -> visibleFrom == null || !d.getMessageTime().isBefore(visibleFrom))
         .toList();
 
     int redisCount = redisMessages.size();
@@ -121,16 +137,15 @@ public class ChatMessageService {
     // 3. 부족하면 MongoDB에서 보충
     int remaining = maxCount - redisMessages.size();
 
-    Instant lastMessageTime = redisMessages.isEmpty()
+    // Redis 리스트는 rightPush라 0번이 가장 오래된 메시지 → 그보다 이전 것을 Mongo에서 보충
+    Instant oldestRedisTime = redisMessages.isEmpty()
         ? Instant.now()
-        : redisMessages.get(redisMessages.size() - 1).getMessageTime(); // 오래된 메시지가 마지막에 위치
+        : redisMessages.get(0).getMessageTime();
 
     PageRequest pageable = PageRequest.of(0, remaining, Sort.by(Sort.Direction.DESC, "messageTime"));
 
-    List<ChatMessageDocument> mongoMessages =
-        mongoRepository.findTopNByChatRoomUuidAndMessageTimeBeforeOrderByMessageTimeDesc(
-            chatRoomId, lastMessageTime, pageable
-        );
+    List<ChatMessageDocument> mongoMessages = new ArrayList<>(findMessagesBefore(
+        chatRoomId, visibleFrom, oldestRedisTime, pageable));
 
 
     // 시간 역순 정렬이므로 다시 정방향 정렬
@@ -152,13 +167,24 @@ public class ChatMessageService {
    * - MongoDB 메시지 상태를 읽음(READ)으로 변경
    */
   public void markMessagesAsRead(String chatRoomId, String userId) {
+    // 0. 이 방 참여자인지 확인
+    requireJoinedMember(chatRoomId,Long.parseLong(userId));
 
     // 1. Redis에서 안 읽은 메시지 수 초기화
     chatRedisService.resetUnread(chatRoomId, userId);
 
+    // 그룹방: Mongo의 READ/UNREAD는 메시지 하나에 값이 하나라 "누가 읽었는지"를 표현 못 함
+    // → 개인별 안 읽은 수(Redis)만 초기화하고 메시지 상태는 건드리지 않음
+    boolean group = chatRoomRepository.findByUuid(chatRoomId)
+        .map(ChatRoom::isGroup)
+        .orElse(false);
+    if (group) {
+      return;
+    }
+
     // 2. MongoDB에서 해당 채팅방의 해당 유저가 안 읽은 메시지를 모두 읽음 처리
     List<ChatMessageDocument> unreadMessages = mongoRepository
-        .findByChatRoomUuidAndSenderNameNotAndChatMessageStatus(chatRoomId, userId, ChatMessageStatus.UNREAD);
+        .findByChatRoomUuidAndSenderIdNotAndChatMessageStatus(chatRoomId, userId, ChatMessageStatus.UNREAD);
 
     unreadMessages.forEach(msg -> msg.setChatMessageStatus(ChatMessageStatus.READ));
 
@@ -168,13 +194,13 @@ public class ChatMessageService {
   /**
    * 이전 메시지 페이징
   */
-  public List<ChatMessageDocumentResponse> getPreviousMessages(String chatRoomId, Instant before, int size) {
+  public List<ChatMessageDocumentResponse> getPreviousMessages(String chatRoomId, Instant before, int size, Long memberId) {
+    //이 방의 참여자인지 + 그룹방이면 참여 시각 이후 메시지만
+    Instant visibleFrom = getVisibleFrom(chatRoomId, memberId);
     PageRequest pageable = PageRequest.of(0, size, Sort.by(Sort.Direction.DESC, "messageTime"));
 
-    List<ChatMessageDocument> mongoMessages =
-        mongoRepository.findTopNByChatRoomUuidAndMessageTimeBeforeOrderByMessageTimeDesc(
-            chatRoomId, before, pageable
-        );
+    List<ChatMessageDocument> mongoMessages = new ArrayList<>(findMessagesBefore(
+        chatRoomId, visibleFrom, before, pageable));
 
     // 시간 역순으로 가져왔으므로, 정방향으로 정렬
     Collections.reverse(mongoMessages);
@@ -182,5 +208,37 @@ public class ChatMessageService {
     return mongoMessages.stream()
         .map(ChatMessageDocumentResponse::from)
         .toList();
+  }
+
+  // 이 방의 JOINED 참여자가 아니면 403
+  private void requireJoinedMember(String roomUuid, Long memberId){
+    if(!chatRoomMemberRepository.existsByChatRoom_UuidAndMember_IdAndStatus(roomUuid,memberId, ChatRoomMemberStatus.JOINED)){
+      throw new CustomException(ErrorCode.FORBIDDEN_CHAT_ROOM_ACCESS);
+    }
+  }
+
+  // JOINED 검사 후, 그룹방이면 내가 참여한 시각 반환 (1:1이면 null = 제한 없음)
+  private Instant getVisibleFrom(String roomUuid, Long memberId) {
+    ChatRoomMember me = chatRoomMemberRepository.findByChatRoom_UuidAndMember_Id(roomUuid, memberId)
+        .filter(m -> m.getStatus() == ChatRoomMemberStatus.JOINED)
+        .orElseThrow(() -> new CustomException(ErrorCode.FORBIDDEN_CHAT_ROOM_ACCESS));
+
+    boolean group = chatRoomRepository.findByUuid(roomUuid)
+        .map(ChatRoom::isGroup)
+        .orElse(false);
+    if (!group || me.getJoinedAt() == null) {
+      return null;
+    }
+    return me.getJoinedAt().atZone(ZoneId.systemDefault()).toInstant();
+  }
+
+  // before 이전 메시지 (visibleFrom이 있으면 그 이후 것만)
+  private List<ChatMessageDocument> findMessagesBefore(String roomUuid, Instant visibleFrom,
+      Instant before, PageRequest pageable) {
+    if (visibleFrom == null) {
+      return mongoRepository.findTopNByChatRoomUuidAndMessageTimeBeforeOrderByMessageTimeDesc(
+          roomUuid, before, pageable);
+    }
+    return mongoRepository.findVisibleMessagesBefore(roomUuid, visibleFrom, before, pageable);
   }
 }

@@ -6,6 +6,8 @@ import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.example.howareyou.domain.chat.entity.ChatRoomMemberStatus;
+import org.example.howareyou.domain.chat.repository.ChatRoomMemberRepository;
 import org.example.howareyou.global.security.CustomMemberDetails;
 import org.example.howareyou.global.security.CustomMemberDetailsService;
 import org.example.howareyou.global.security.jwt.JwtTokenProvider;
@@ -36,6 +38,7 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
   private final JwtTokenProvider jwtTokenProvider;
   private final CustomMemberDetailsService customMemberDetailsService;
+  private final ChatRoomMemberRepository chatRoomMemberRepository;
 
   @Override
   public void registerStompEndpoints(StompEndpointRegistry registry) {
@@ -122,9 +125,10 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
               throw new IllegalArgumentException("WebSocket 인증 실패: " + e.getMessage());
             }
           } else {
-            log.warn("⚠️ WebSocket CONNECT: 토큰이 없습니다 - 임시로 연결 허용");
-            // 임시로 인증 없이 연결 허용 (디버깅용)
-            // throw new IllegalArgumentException("WebSocket 인증 토큰이 필요합니다");
+
+            //log.warn("⚠️ WebSocket CONNECT: 토큰이 없습니다 - 임시로 연결 허용");
+
+             throw new IllegalArgumentException("WebSocket 인증 토큰이 필요합니다");
           }
         } else if (StompCommand.SEND.equals(accessor.getCommand())) {
           log.info("📤 WebSocket SEND 요청: destination={}", accessor.getDestination());
@@ -136,6 +140,25 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
           }
         } else if (StompCommand.SUBSCRIBE.equals(accessor.getCommand())) {
           log.info("📡 WebSocket SUBSCRIBE 요청: destination={}", accessor.getDestination());
+          // 요청이 들어왔으니 검사
+          // 방 uuid 꺼내기
+          String destination = accessor.getDestination();
+          String prefix = "/topic/chatroom/";
+
+          if (destination != null && destination.startsWith(prefix)) {
+            String roomUuid = destination.substring(prefix.length());
+
+            // 로그인 사용자 ID 꺼내기
+            Authentication auth = (Authentication) accessor.getUser();
+            if (auth == null || !(auth.getPrincipal() instanceof CustomMemberDetails)) {
+              throw new IllegalArgumentException("WebSocket 구독: 인증 정보가 없습니다");
+            }
+            Long memberId = ((CustomMemberDetails) auth.getPrincipal()).getId();
+            if (!chatRoomMemberRepository.existsByChatRoom_UuidAndMember_IdAndStatus(
+                    roomUuid, memberId, ChatRoomMemberStatus.JOINED)) {
+              throw new IllegalArgumentException("WebSocket 구독: 채팅방 참여자가 아닙니다");
+            }
+          }
         }
         
         return message;

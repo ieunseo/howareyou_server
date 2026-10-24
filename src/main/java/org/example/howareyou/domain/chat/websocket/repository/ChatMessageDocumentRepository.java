@@ -18,10 +18,20 @@ public interface ChatMessageDocumentRepository extends MongoRepository<ChatMessa
           Pageable pageable
   );
 
-  List<ChatMessageDocument> findByChatRoomUuidAndSenderNameNotAndChatMessageStatus(
+  List<ChatMessageDocument> findByChatRoomUuidAndSenderIdNotAndChatMessageStatus(
           String chatRoomUuid,
           String senderId,
           ChatMessageStatus status
+  );
+
+  // 그룹방: 내가 참여한 시각(from) 이후 ~ before 이전 메시지만
+  @org.springframework.data.mongodb.repository.Query(
+          value = "{'chatRoomUuid': ?0, 'messageTime': { '$gte': ?1, '$lt': ?2 }}")
+  List<ChatMessageDocument> findVisibleMessagesBefore(
+          String chatRoomUuid,
+          Instant from,
+          Instant before,
+          Pageable pageable
   );
 
   Optional<ChatMessageDocument> findTopByChatRoomUuidOrderByMessageTimeDesc(String chatRoomUuid);

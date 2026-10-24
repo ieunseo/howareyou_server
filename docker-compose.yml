@@ -68,16 +68,19 @@ services:
       context: ./fastapi-api
     container_name: fastapi-api
     restart: unless-stopped
+    environment:
+      MONGO_URI: ${MONGO_URI}
+      MONGO_DB: ${MONGO_DB}
     ports:
       - "8001:8001"
     healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:8001/health" ]
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
       interval: 10s
       timeout: 5s
       retries: 3
 
   zookeeper:
-    image: bitnami/zookeeper:3.9
+    image: bitnamilegacy/zookeeper:3.9 #Bitnami가 기존 버전 이미지를 bitnamilegacy 저장소로 옮겼습니다
     container_name: zookeeper
     restart: unless-stopped
     ports:
@@ -88,7 +91,7 @@ services:
       - kafka-net
 
   kafka:
-    image: bitnami/kafka:3.7
+    image: bitnamilegacy/kafka:3.7 #Bitnami가 기존 버전 이미지를 bitnamilegacy 저장소로 옮겼습니다.
     container_name: kafka
     restart: unless-stopped
     ports:

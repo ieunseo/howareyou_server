@@ -344,9 +344,16 @@
         // 페이지 로드 시 초기화
         window.onload = function() {
             debugCookieReading(); // 쿠키 읽기 디버깅
-            checkAuthStatus();
             checkDatabaseStatus(); // 데이터베이스 상태 확인
-            handleOAuthSuccess(); // OAuth2 로그인 성공 처리
+
+            // OAuth2 리다이렉트로 새 토큰이 왔으면 그것만 사용.
+            // (예전 토큰 확인을 동시에 돌리면, 예전 토큰의 401 응답이 새 토큰까지 지워 버림)
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.get('oauth_success') === 'true') {
+                handleOAuthSuccess(); // OAuth2 로그인 성공 처리
+            } else {
+                checkAuthStatus();
+            }
         };
 
         // 인증 상태 확인
@@ -454,9 +461,12 @@
                 console.log('토큰 갱신 요청 시작...');
                 console.log('현재 쿠키 상태:', document.cookie);
                 
-                // HttpOnly 쿠키는 자동으로 전송되므로 별도 헤더 설정 불필요
+                // Refresh 쿠키는 자동 전송, 만료된 Access Token은 헤더로 보내야 함 (서버 필수 헤더)
                 const response = await fetch('/api/auth/refresh', {
                     method: 'POST',
+                    headers: {
+                        'X-Expired-Access-Token': currentAccessToken || localStorage.getItem('accessToken') || ''
+                    },
                     credentials: 'include' // 쿠키 포함
                 });
 
@@ -464,7 +474,12 @@
                 console.log('토큰 갱신 응답 헤더:', response.headers);
 
                 if (response.ok) {
-                    currentAccessToken = response.headers.get('Authorization')?.replace('Bearer ', '') || '';
+                    const result = await response.json();
+                    currentAccessToken = result.access
+                        || response.headers.get('Authorization')?.replace('Bearer ', '') || '';
+                    currentRefreshToken = result.refresh || currentRefreshToken;
+                    localStorage.setItem('accessToken', currentAccessToken);
+                    localStorage.setItem('refreshToken', currentRefreshToken);
                     console.log('새로운 Access Token:', currentAccessToken ? currentAccessToken.substring(0, 50) + '...' : '없음');
                     updateTokenDisplay();
                     showNotification('토큰 갱신 성공!', 'success');
@@ -786,8 +801,11 @@
                     if (accessToken) {
                         console.log('URL에서 받은 Access Token 사용');
                         currentAccessToken = accessToken;
+                        // Refresh Token은 URL이 아니라 'Refresh' 쿠키로 옴 (HttpOnly=false라 읽을 수 있음)
+                        currentRefreshToken = getCookie('Refresh') || '';
                         // localStorage에 토큰 저장
                         localStorage.setItem('accessToken', currentAccessToken);
+                        localStorage.setItem('refreshToken', currentRefreshToken);
                         await loadUserInfo();
                         showHomePage();
                     } else {

@@ -40,5 +40,22 @@ public interface ChatRoomMemberRepository extends JpaRepository<ChatRoomMember, 
 """)
   Optional<ChatRoom> findByUuidWithMembers(@Param("uuid") String uuid);
 
+  //chatroom 에 존재하는사람인지 확인
+  boolean existsByChatRoom_UuidAndMember_IdAndStatus(
+          String roomUuid,
+          Long memberId,
+          ChatRoomMemberStatus status
+  );
 
+  // 방 uuid + 회원 id로 참여 정보 한 건
+  Optional<ChatRoomMember> findByChatRoom_UuidAndMember_Id(String roomUuid, Long memberId);
+
+  // 메시지 수신자: 이 방의 JOINED 참여자 중 보낸 사람 제외
+  @Query("""
+      select m.member.id from ChatRoomMember m
+      where m.chatRoom.uuid = :uuid
+        and m.status = org.example.howareyou.domain.chat.entity.ChatRoomMemberStatus.JOINED
+        and m.member.id <> :senderId
+      """)
+  List<Long> findJoinedMemberIdsExcept(@Param("uuid") String roomUuid, @Param("senderId") Long senderId);
 }

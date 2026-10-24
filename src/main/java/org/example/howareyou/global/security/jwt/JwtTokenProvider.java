@@ -1,6 +1,7 @@
 package org.example.howareyou.global.security.jwt;
 
 import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.ExpiredJwtException;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.SignatureAlgorithm;
 import io.jsonwebtoken.security.Keys;
@@ -95,7 +96,23 @@ public class JwtTokenProvider {
      * @return Auth 테이블 ID
      */
     public Long getAuthIdFromAccessToken(String token) {
-        Claims claims = parse(token);
+        return extractAuthId(parse(token));
+    }
+
+    /**
+     * 만료된 Access Token에서도 Auth ID를 꺼냅니다. (토큰 갱신용)
+     * 서명은 그대로 검증하고, 만료(exp)만 허용합니다.
+     */
+    public Long getAuthIdFromExpiredAccessToken(String token) {
+        try {
+            return extractAuthId(parse(token));
+        } catch (ExpiredJwtException e) {
+            // jjwt는 서명 검증을 통과한 뒤에 만료를 검사하므로 e.getClaims()는 신뢰할 수 있음
+            return extractAuthId(e.getClaims());
+        }
+    }
+
+    private Long extractAuthId(Claims claims) {
         String authId = claims.get("identifier", String.class);
         
         if (authId == null || authId.trim().isEmpty()) {

@@ -18,6 +18,7 @@ public interface ChatRoomRepository extends JpaRepository<ChatRoom, Long> {
     JOIN c.members m2
     WHERE m1.member.id = :member1Id
       AND m2.member.id = :member2Id
+      AND (c.type IS NULL OR c.type <> org.example.howareyou.domain.chat.entity.ChatRoomType.GROUP)
   """)
   ChatRoom findByMembers(@Param("member1Id") Long member1Id, @Param("member2Id") Long member2Id);
 

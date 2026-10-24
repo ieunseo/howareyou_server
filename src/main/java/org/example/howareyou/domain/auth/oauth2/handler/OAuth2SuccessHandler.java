@@ -44,6 +44,13 @@ public class OAuth2SuccessHandler extends SimpleUrlAuthenticationSuccessHandler 
     @Value("${spring.profiles.active:dev}")
     private String activeProfile;
 
+    /**
+     * 로그인 후 이동 경로 강제 지정 (백엔드 단독 테스트용, 예: /test-login.html)
+     * 비어 있으면 기존대로 /login/success 또는 /signup/membername
+     */
+    @Value("${OAUTH2_REDIRECT_PATH:}")
+    private String redirectPathOverride;
+
 
     public OAuth2SuccessHandler(List<OAuth2LoginProcessor> list) {
         this.processorMap = list.stream()
@@ -85,7 +92,12 @@ public class OAuth2SuccessHandler extends SimpleUrlAuthenticationSuccessHandler 
             // 프로필 미완료 → membername 설정 페이지
             path = "/signup/membername";
         }
-        
+
+        // 프론트 없이 백엔드만 테스트할 때: 설정된 경로로 강제 이동
+        if (!redirectPathOverride.isBlank()) {
+            path = redirectPathOverride;
+        }
+
         redirectUrl = UriComponentsBuilder
                 .fromUriString(frontUrl)
                 .path(path)
